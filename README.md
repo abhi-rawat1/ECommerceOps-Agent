@@ -119,30 +119,45 @@ Cancel the open order for customer 51.
 
 ```mermaid
 flowchart LR
-    Operator[Viewer or Operations User] --> UI[Streamlit Dashboards]
-    Admin[Administrator] --> UI
-
+    User[Viewer or Operations User] --> UI[Streamlit UI Dashboard]
     UI --> API[FastAPI]
-    API --> Auth[JWT and RBAC]
-    API --> Workflow[Support Workflow]
+    subgraph FastAPIServer ["FastAPIServer "]
+        API --> Auth[JWT and RBAC Autorization]
+        Auth --> Process[New Request]
+        Auth --> Resume[Resume Request]
+        
+        subgraph Traces ["LangGraph Workflow with Guardrails & Trace/Langfuse Events "]
+            Resume --> MergedState[Merge original request and follow-up answer]
+            Process --> LLMAgentIntentDetection{LLM Agent Intent Detection}
+            MergedState --> LLMAgentIntentDetection{LLM Agent Intent Detection}
+            LLMAgentIntentDetection -->|Metrics| Metrics[Semantic DBT Metrics Definitions]
+            Metrics --> DB[(PostgreSQL)]
+            
+            LLMAgentIntentDetection -->|General Query| LLMSQLGeneratorAgent
+            LLMSQLGeneratorAgent[LLM SQL Generator Agent] --> Guardrails[SQL and Action Guardrails] 
+            Guardrails --> DB[(PostgreSQL)]
+            
+            LLMAgentIntentDetection -->|Order Lifecycle Action| ApprovalWorkflow[Approval HITL Workflow]
+            ApprovalWorkflow --> DB[(PostgreSQL)]
 
-    Workflow --> Intent[Intent and Entity Detection]
-    Workflow --> Guardrails[SQL and Action Guardrails]
-    Workflow --> SQLAgent[LLM SQL Agent]
-    SQLAgent --> PostgreSQL[(PostgreSQL)]
+            DB --> Response[LLM Response Generator Agent- Chart/grid/summary/results]
 
-    Workflow --> Approval[Human Approval Workflow]
-    Approval --> Store[(Approval and Audit Records)]
+            LLMAgentIntentDetection -->|Missing Info/ Clarification Needed| Response
+            
+        end
+        classDef highlight fill:#dbeafe,stroke:#1d4ed8,stroke-width:3px,color:#1e3a8a
+        class LLMAgentIntentDetection,Response,LLMSQLGeneratorAgent highlight
+        
+        classDef subboxhighlight1 fill:#light-green,stroke:#light-green,stroke-width:3px,color:#1b5e20
+        class Traces subboxhighlight1
 
-    SQLAgent --> Metrics[Semantic Metrics]
-    Metrics --> PostgreSQL
-
-    Guardrails --> Trace[Tracing and Langfuse]
-    Trace --> Store
-
-    PostgreSQL --> Response[Summary, Table, or Chart]
-    Store --> Response
-    Response --> UI
+        Auth --> Approval[Approval Workflow- Cancel/Approve/Reject]
+        Approval --> |Update Approval Request| DB1[(PostgreSQL)]
+    end
+    classDef boxhighlight fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px,color:#1b5e20
+    class FastAPIServer boxhighlight
+    Response --> UI1[Streamlit UI Dashboard]
+    DB1 -->  UI1[Streamlit UI Dashboard]
 ```
 
 The detailed component and request flow is documented in [docs/architecture.md](docs/architecture.md).
