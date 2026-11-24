@@ -15,7 +15,7 @@
 
 ```mermaid
 flowchart LR
-    User[Viewer or Operations User] --> UI[Streamlit Dashboards]
+    User[Viewer or Operations User] --> UI[Streamlit UI Dashboard]
     UI --> API[FastAPI]
     subgraph FastAPIServer ["FastAPIServer "]
         API --> Auth[JWT and RBAC Autorization]
@@ -23,13 +23,10 @@ flowchart LR
         Auth --> Resume[Resume Request]
         
         subgraph Traces ["LangGraph Workflow with Guardrails & Trace/Langfuse Events "]
-            Process --> TraceStart[Trace workflow_started]
             Resume --> MergedState[Merge original request and follow-up answer]
-            TraceStart --> LFStart[Langfuse workflow trace]
-            MergedState --> FollowUpTrace[Trace follow_up_received]
-            LFStart --> LLMAgentIntentDetection{LLM Agent Intent Detection}
-            FollowUpTrace --> LLMAgentIntentDetection{LLM Agent Intent Detection}
-            LLMAgentIntentDetection -->|Metrics| Metrics[Semantic Metrics Definitions]
+            Process --> LLMAgentIntentDetection{LLM Agent Intent Detection}
+            MergedState --> LLMAgentIntentDetection{LLM Agent Intent Detection}
+            LLMAgentIntentDetection -->|Metrics| Metrics[Semantic DBT Metrics Definitions]
             Metrics --> DB[(PostgreSQL)]
             
             LLMAgentIntentDetection -->|General Query| LLMSQLGeneratorAgent
@@ -52,8 +49,8 @@ flowchart LR
     end
     classDef boxhighlight fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px,color:#1b5e20
     class FastAPIServer boxhighlight
-    Response --> UI1[Streamlit Dashboards]
-    DB1 -->  UI1[Streamlit Dashboards]
+    Response --> UI1[Streamlit UI Dashboard]
+    DB1 -->  UI1[Streamlit UI Dashboard]
 ```
 
 ## Request flow
