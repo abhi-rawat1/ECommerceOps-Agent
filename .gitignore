@@ -1,0 +1,45 @@
+# Secrets and environment-specific configuration
+.env
+.env.*
+.*.env
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# Local databases and runtime state
+*.db
+*.sqlite
+*.sqlite3
+*.jsonl
+logs/
+
+# Python environments and caches
+.venv/
+venv/
+env/
+myenv/
+myenv1/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.pyre/
+
+# Build and coverage output
+dist/
+build/
+out/
+coverage/
+htmlcov/
+
+# IDE and OS files
+.vscode/
+.idea/
+.settings/
+.project/
+.DS_Store
+Thumbs.db
+
+# Agent workspace configuration
+.agents/

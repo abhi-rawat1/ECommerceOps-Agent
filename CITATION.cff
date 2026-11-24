@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+title: ECommerceOps-Agent
+message: If you use this project in research or operational evaluation, please cite it.
+type: software
+authors:
+  - family-names: Project
+    given-names: Contributors
+repository-code: https://github.com/OWNER/ECommerceOps-Agent
+license: Apache-2.0
+keywords:
+  - agentic-ai
+  - ecommerce
+  - customer-support
+  - inventory
+  - sql-agent
+  - approval-workflow
+  - audit-logging
+  - fastapi
+  - streamlit
+  - postgresql

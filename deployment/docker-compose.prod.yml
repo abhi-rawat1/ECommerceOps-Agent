@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: prod
+      POSTGRES_URL: ${POSTGRES_URL}
+      DB_SCHEMA: ecommerce
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MODEL_NAME: gpt-4o-mini
+      LOG_DIR: /var/log/customersupportassist
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    ports:
+      - "8000:8000"
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+
+  streamlit:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: prod
+      POSTGRES_URL: ${POSTGRES_URL}
+      DB_SCHEMA: ecommerce
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MODEL_NAME: gpt-4o-mini
+      LOG_DIR: /var/log/customersupportassist
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    ports:
+      - "8501:8501"
+    command: streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+    restart: unless-stopped

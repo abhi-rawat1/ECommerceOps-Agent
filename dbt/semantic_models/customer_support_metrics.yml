@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: ecommerce_support_metrics
+    description: Semantic metrics used by the CustomerSupportAssist platform for operational and support decision-making.
+    columns:
+      - name: metric_name
+        description: Name of the metric
+      - name: value
+        description: Metric value for the selected time period
+
+    metrics:
+      - name: total_revenue
+        label: Total Revenue
+        type: sum
+        sql: total_amount
+        timestamp: order_date
+        filters:
+          - field: order_date
+            operator: '>='
+            value: "{{ var('report_start_date') }}"
+
+      - name: orders_count
+        label: Orders Count
+        type: count
+        sql: order_id
+        timestamp: order_date
+
+      - name: return_rate
+        label: Return Rate
+        type: ratio
+        numerator: returned_order_count
+        denominator: total_orders
+        description: Percentage of orders returned within the reporting window
+
+      - name: avg_order_value
+        label: Average Order Value
+        type: average
+        sql: total_amount
+        timestamp: order_date
+
+      - name: refund_resolution_time_days
+        label: Refund Resolution Time (Days)
+        type: average
+        sql: resolved_at - created_at
+        timestamp: created_at
+
+      - name: fulfillment_delay_days
+        label: Fulfillment Delay Days
+        type: average
+        sql: shipped_at - created_at
+        timestamp: created_at

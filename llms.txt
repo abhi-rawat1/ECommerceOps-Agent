@@ -1,0 +1,23 @@
+# ECommerceOps-Agent
+
+ECommerce Ops-Agent is an agentic e-commerce operations platform featuring human-in-the-loop (HITL) guardrails and full auditability. Built with LangGraph, LangChain, FastAPI, PostgreSQL, Streamlit, and Langfuse, it enables teams to run natural-language inventory queries, manage controlled order cancellations, returns, and refund approvals, and monitor operations through role-based dashboards, predefined metrics, and interactive charts.
+
+Primary repository purpose:
+- Query e-commerce inventory and order data.
+- Review customer order histories and shipments.
+- Submit return, cancellation, and refund actions.
+- Require operations-manager approval for sensitive actions.
+- Present predefined operational metrics and charts.
+- Record trace and audit evidence.
+
+Canonical documentation:
+- README: ./README.md
+- Architecture: ./docs/architecture.md
+- Local development: ./docs/local-development.md
+- Deployment: ./docs/deployment.md
+- Operator guide: ./docs/operator-guide.md
+- Roadmap: ./docs/roadmap.md
+- Security: ./SECURITY.md
+- Contributing: ./CONTRIBUTING.md
+
+This project is a reference and demonstration implementation. Production use requires replacing demo authentication, hardening JWT and database credentials, securing audit storage, integrating enterprise identity, and implementing external commerce action validation.

@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_URL: postgresql+psycopg://postgres:postgres@host.docker.internal:5432/postgres
+      DB_SCHEMA: ecommerce
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MODEL_NAME: gpt-4o-mini
+    restart: unless-stopped
+
+  streamlit:
+    build: .
+    command: streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+    ports:
+      - "8501:8501"
+    environment:
+      POSTGRES_URL: postgresql+psycopg://postgres:postgres@host.docker.internal:5432/postgres
+      DB_SCHEMA: ecommerce
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      MODEL_NAME: gpt-4o-mini
+    restart: unless-stopped
