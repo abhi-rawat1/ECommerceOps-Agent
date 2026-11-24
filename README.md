@@ -1,10 +1,6 @@
 # ECommerceOps-Agent
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11+-3776AB.svg)](requirements.txt)
-[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
-[![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B.svg)](https://streamlit.io/)
-[![PostgreSQL](https://img.shields.io/badge/database-PostgreSQL-4169E1.svg)](https://www.postgresql.org/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE) [![Python](https://img.shields.io/badge/python-3.11+-3776AB.svg?logo=python&logoColor=white)](requirements.txt) [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/) [![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/) [![PostgreSQL](https://img.shields.io/badge/database-PostgreSQL-4169E1.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/) [![LangChain](https://img.shields.io/badge/LangChain-1C3C3C.svg?logo=langchain&logoColor=white)](https://www.langchain.com/) [![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C.svg?logo=langgraph&logoColor=white)](https://langchain-ai.github.io/langgraph/) [![Agentic AI](https://img.shields.io/badge/Agentic_AI-FF6B35.svg?logo=openai&logoColor=white)](#) [![Langfuse](https://img.shields.io/badge/Langfuse-2B2B2B.svg?logo=langfuse&logoColor=white)](https://langfuse.com/)
 
 > Agentic e-commerce operations platform for natural-language inventory queries, controlled order cancellations and returns, refund approvals, predefined metrics, charts, role-based dashboards, guardrails, and auditable operator actions.
 
@@ -246,7 +242,7 @@ Open:
 - Dashboard: `http://localhost:8501`
 - API documentation: `http://localhost:8000/docs`
 
-Complete cross-platform instructions and troubleshooting are in [docs/local-development.md](docs/local-development.md).
+Complete cross-platform instructions and troubleshooting are in [docs/local_setup.md](docs/local_setup.md).
 
 ## Configuration
 
@@ -355,7 +351,7 @@ The current detailed roadmap is in [docs/roadmap.md](docs/roadmap.md).
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [Local development](docs/local-development.md)
+- [Local Setup](docs/local_setup.md)
 - [Deployment](docs/deployment.md)
 - [Operator guide](docs/operator-guide.md)
 - [Roadmap](docs/roadmap.md)
