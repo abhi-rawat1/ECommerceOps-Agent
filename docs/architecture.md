@@ -4,14 +4,51 @@
 
 - **Streamlit dashboards:** support operations, analytics, and administration interfaces.
 - **FastAPI API:** authentication, JWT authorization, support requests, approvals, metrics, and audit endpoints.
-- **Support workflow:** intent classification, entity extraction, follow-up handling, and approval routing.
+- **Agentic LLM Workflow:** intent classification, entity extraction, follow-up handling, and approval routing.
 - **SQL agent:** natural-language-to-SQL generation and execution for approved read-only tables.
 - **Guardrails:** SQL validation, blocked destructive statements, table allowlists, and approval-required actions.
 - **PostgreSQL:** synthetic e-commerce data, users, and approval records.
 - **Semantic metrics:** dbt-style definitions for revenue, returns, inventory risk, and support KPIs.
 - **Tracing:** support audit events and optional Langfuse observability.
 
+## High Level Flow Diagram
 
+```mermaid
+flowchart LR
+    User[Viewer or Operations User] --> UI[Streamlit Dashboards]
+    UI --> API[FastAPI]
+    subgraph FastAPIServer ["FastAPIServer "]
+        API --> Auth[JWT and RBAC Autorization]
+        Auth --> Workflow[Workflow]
+        Workflow --> LLMAgentIntentDetection{LLM Agent Intent Detection}
+        
+        subgraph Traces ["LangGraph Workflow with Guardrails & Trace/Langfuse Events "]
+            LLMAgentIntentDetection -->|Metrics| Metrics[Semantic Metrics Definitions]
+            Metrics --> DB[(PostgreSQL)]
+            
+            LLMAgentIntentDetection -->|General Query| LLMSQLGeneratorAgent
+            LLMSQLGeneratorAgent[LLM SQL Generator Agent] --> Guardrails[SQL and Action Guardrails] 
+            Guardrails --> DB[(PostgreSQL)]
+            
+            LLMAgentIntentDetection -->|Order Lifecycle Action| ApprovalWorkflow[Approval HITL Workflow]
+            ApprovalWorkflow --> DB[(PostgreSQL)]
+
+            DB --> Response[LLM Response Generator Agent- Chart/grid/summary/results]
+
+            LLMAgentIntentDetection -->|Missing Info/ Clarification Needed| Response
+            
+        end
+        classDef highlight fill:#dbeafe,stroke:#1d4ed8,stroke-width:3px,color:#1e3a8a
+        class LLMAgentIntentDetection,Response,LLMSQLGeneratorAgent highlight
+
+        Workflow --> Approval[Approval Workflow- Cancel/Approve/Reject]
+        Approval --> |Update Approval Request| DB1[(PostgreSQL)]
+    end
+    Response --> UI1[Streamlit Dashboards]
+    DB1 -->  UI1[Streamlit Dashboards]
+```
+
+## Low Level Flow Diagram
 
 ```mermaid
 flowchart LR
@@ -24,7 +61,7 @@ flowchart LR
     API --> Process[process_support_request]
     API --> Resume[resume_support_request]
 
-    subgraph LG[LangGraph Support Workflow]
+    subgraph LG[LangGraph Workflow with Guardrails & Trace/Langfuse Events]
         Process --> TraceStart[Trace workflow_started]
         Resume --> MergedState[Merge original request and follow-up answer]
         TraceStart --> LFStart[Langfuse workflow trace]
