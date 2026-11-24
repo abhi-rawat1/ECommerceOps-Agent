@@ -19,10 +19,16 @@ flowchart LR
     UI --> API[FastAPI]
     subgraph FastAPIServer ["FastAPIServer "]
         API --> Auth[JWT and RBAC Autorization]
-        Auth --> Workflow[Workflow]
-        Workflow --> LLMAgentIntentDetection{LLM Agent Intent Detection}
+        Auth --> Process[New Request]
+        Auth --> Resume[Resume Request]
         
         subgraph Traces ["LangGraph Workflow with Guardrails & Trace/Langfuse Events "]
+            Process --> TraceStart[Trace workflow_started]
+            Resume --> MergedState[Merge original request and follow-up answer]
+            TraceStart --> LFStart[Langfuse workflow trace]
+            MergedState --> FollowUpTrace[Trace follow_up_received]
+            LFStart --> LLMAgentIntentDetection{LLM Agent Intent Detection}
+            FollowUpTrace --> LLMAgentIntentDetection{LLM Agent Intent Detection}
             LLMAgentIntentDetection -->|Metrics| Metrics[Semantic Metrics Definitions]
             Metrics --> DB[(PostgreSQL)]
             
@@ -41,73 +47,13 @@ flowchart LR
         classDef highlight fill:#dbeafe,stroke:#1d4ed8,stroke-width:3px,color:#1e3a8a
         class LLMAgentIntentDetection,Response,LLMSQLGeneratorAgent highlight
 
-        Workflow --> Approval[Approval Workflow- Cancel/Approve/Reject]
+        Auth --> Approval[Approval Workflow- Cancel/Approve/Reject]
         Approval --> |Update Approval Request| DB1[(PostgreSQL)]
     end
     classDef boxhighlight fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px,color:#1b5e20
     class FastAPIServer boxhighlight
     Response --> UI1[Streamlit Dashboards]
     DB1 -->  UI1[Streamlit Dashboards]
-```
-
-## Low Level Flow Diagram
-
-```mermaid
-flowchart LR
-    User[Viewer or Operations User] --> UI[Streamlit Dashboards]
-    User --> Admin[Administration UI]
-    UI --> API[FastAPI Support and Metrics APIs]
-    Admin --> API
-
-    API --> Auth[JWT and RBAC]
-    API --> Process[process_support_request]
-    API --> Resume[resume_support_request]
-
-    subgraph LG[LangGraph Workflow with Guardrails & Trace/Langfuse Events]
-        Process --> TraceStart[Trace workflow_started]
-        Resume --> MergedState[Merge original request and follow-up answer]
-        TraceStart --> LFStart[Langfuse workflow trace]
-        MergedState --> FollowUpTrace[Trace follow_up_received]
-        LFStart --> Intent
-        FollowUpTrace --> Intent
-
-        Intent[_intent_node<br/>detect intent, entities, missing fields] --> Route{_route_node}
-
-        Route -->|missing_fields| FollowUp[_follow_up_node]
-        Route -->|metric_query| Metric[_metric_query_node]
-        Route -->|initiate_refund, cancel_item,<br/>cancel_order, initiate_return| Lifecycle[_lifecycle_action_node]
-        Route -->|refund_status, general_query,<br/>lookup_order, lookup_customer_orders,<br/>inventory_check| Read[_read_query_node]
-        Route -->|unknown or other intent| Clarify[_clarification_node]
-
-        Metric --> Semantic[Semantic Metric Definition]
-        Metric --> SQLAgent
-        Read --> SQLAgent[SQL Agent generate and execute]
-        Lifecycle --> LifecycleService[Lifecycle Service<br/>refund or cancel or return]
-
-        SQLAgent --> Guardrails[SQL Guardrails and Table Allowlist]
-        Guardrails --> DB[(PostgreSQL)]
-        Semantic --> DB
-        LifecycleService --> ApprovalRecord[Create approval request and return awaiting status]
-        ApprovalRecord --> ApprovalStore[(Approval Records)]
-
-        DeadApproval[_human_approval_node<br/>defined but not targeted by _route_node] -. graph node only .-> END1
-        FollowUp --> END1([END])
-        Clarify --> END1
-        Metric --> END1
-        Read --> END1
-        Lifecycle --> END1
-    end
-
-    Admin --> ApprovalManager[Operations Manager<br/>approve, reject, or cancel]
-    ApprovalManager --> ApprovalStore
-    ApprovalStore --> DB
-    ApprovalStore --> Audit[(Audit Logs)]
-
-    END1 --> Response[Status, Answer, Rows, Presentation, SQL, Pending State]
-    Guardrails --> Traces[Trace Events and Langfuse]
-    LifecycleService --> Traces
-    Traces --> Audit
-    Response --> UI
 ```
 
 ## Request flow
