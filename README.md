@@ -148,7 +148,7 @@ flowchart LR
         classDef highlight fill:#dbeafe,stroke:#1d4ed8,stroke-width:3px,color:#1e3a8a
         class LLMAgentIntentDetection,Response,LLMSQLGeneratorAgent highlight
         
-        classDef subboxhighlight1 fill:#light-green,stroke:#light-green,stroke-width:3px,color:#1b5e20
+        classDef subboxhighlight1 fill:#90EE90,stroke:#90EE90,stroke-width:3px,color:#1b5e20
         class Traces subboxhighlight1
 
         Auth --> Approval[Approval Workflow- Cancel/Approve/Reject]
