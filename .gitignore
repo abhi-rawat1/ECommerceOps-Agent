@@ -42,4 +42,6 @@ htmlcov/
 Thumbs.db
 
 # Agent workspace configuration
-.agents/
+.agents/*
+!.agents/skills/langgraph-support-workflow
+!.agents/skills/langgraph-support-workflow/**
