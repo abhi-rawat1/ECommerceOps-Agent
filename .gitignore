@@ -43,5 +43,5 @@ Thumbs.db
 
 # Agent workspace configuration
 .agents/*
-!.agents/skills/langgraph-support-workflow
-!.agents/skills/langgraph-support-workflow/**
+!.agents/skills/
+!.agents/skills/**
