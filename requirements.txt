@@ -4,6 +4,7 @@ langchain-classic
 langchain-core>=0.3.0
 langchain-openai>=0.3.0
 langgraph>=0.2.0
+langgraph-checkpoint-postgres>=2.0.0
 sqlglot>=27.0.0
 langfuse>=3.0.0,<4.0.0
 sqlalchemy>=2.0.0

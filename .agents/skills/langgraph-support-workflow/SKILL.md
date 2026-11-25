@@ -185,6 +185,66 @@ Use `trace_request_step()` for meaningful workflow events, such as:
 
 Keep event names stable and specific. Update root-span output with status and answer metadata when appropriate.
 
+## Memory and Checkpoint Storage
+
+Use PostgreSQL for production memory and LangGraph checkpoints.
+
+Relevant implementation:
+
+- `services/checkpoint_store.py`
+- `services/memory_store.py`
+- `migrations/002_create_agent_memory_tables.sql`
+- `LANGGRAPH_CHECKPOINT_STORE`
+- `conversation_id` in workflow state and API payloads
+
+Memory layers:
+
+- LangGraph checkpoints: durable graph state and resume points
+- Agent sessions: authenticated conversation ownership and TTL
+- Conversation turns: recent short-term context
+- Workflow state: server-authoritative pending follow-up state
+- Agent memories: explicit, user-scoped, TTL-aware long-term facts
+- Langfuse: traces and observability, not application memory
+- Audit logs: security evidence, not prompt context
+
+Rules:
+
+1. Use `conversation_id` as the LangGraph `thread_id`.
+2. Scope sessions and workflow state to `user_id`.
+3. Never accept client-only pending state as an authorization source.
+4. Use persisted `agent_workflow_state` for follow-up recovery.
+5. Mask email addresses and payment-card patterns before conversation storage.
+6. Do not store passwords, credentials, secrets, authorization decisions, or raw payment data.
+7. Persist sensitive long-term facts only through an approved policy or explicit confirmation.
+8. Apply TTL and deletion behavior to sessions and memories.
+9. Load only recent turns and relevant memories into prompts.
+10. Never use memory for authorization or RBAC decisions.
+
+PostgreSQL configuration:
+
+```text
+LANGGRAPH_CHECKPOINT_STORE=postgresql
+POSTGRES_URL=postgresql+psycopg://.../postgres
+```
+
+Local-only development may use:
+
+```text
+LANGGRAPH_CHECKPOINT_STORE=memory
+```
+
+The `memory` setting is process-local and lost on restart.
+
+Before memory changes:
+
+1. Read `support_workflow.py` and `memory_store.py`.
+2. Apply migration `002_create_agent_memory_tables.sql`.
+3. Verify authenticated `user_id` and `conversation_id` are present.
+4. Invoke LangGraph with `{"configurable":{"thread_id":conversation_id}}`.
+5. Persist turns and workflow state through `memory_store.py`.
+6. Update API payloads and Streamlit session state together.
+7. Test cross-user isolation and restart recovery.
+
 ## Implementation Procedure
 
 1. Read `support_workflow.py` and the services used by the target branch.

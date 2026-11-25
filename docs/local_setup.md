@@ -13,13 +13,13 @@ Install the following on your machine:
 ## 2. Clone and navigate
 
 ```bash
-cd c:\Abhishek\Agentic-AI\AgenticSQL
+cd c:\ECommerceOps-Agent
 ```
 
 ## 3. Create a virtual environment
 
 ```bash
-cd customer_support_assist
+cd ECommerceOps-Agent
 python -m venv .venv
 .venv\Scripts\activate
 ```
@@ -48,6 +48,10 @@ MODEL_NAME=gpt-4o-mini
 ALLOWED_TABLES=customers,orders,order_items,products,returns,refunds,inventory,shipments
 APPROVAL_REQUIRED_ACTIONS=refund_order,create_return,cancel_order,update_inventory
 LOG_DIR=logs
+LANGGRAPH_CHECKPOINT_STORE=postgresql
+LANGFUSE_PUBLIC_KEY=
+LANGFUSE_SECRET_KEY=
+LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
 ```
 
 ## 6. Create PostgreSQL database and schema
@@ -64,7 +68,14 @@ If using an existing database like `postgres`, ensure the user has access and th
 CREATE SCHEMA IF NOT EXISTS ecommerce;
 ```
 
-## 7. Load seed dataset
+## 7. Load migrations and seed dataset
+
+Set PostgreSQL-backed LangGraph checkpoints in `.env`:
+
+```env
+
+=postgresql
+```
 
 Run:
 
@@ -72,7 +83,7 @@ Run:
 python scripts/load_ecommerce_data.py
 ```
 
-This will execute the schema and seed script from `sql/ecommerce_schema.sql`.
+This applies numbered SQL migrations, creates the agent memory tables and LangGraph checkpoint infrastructure, and loads the e-commerce seed data.
 
 ## 8. Run the approval API first
 

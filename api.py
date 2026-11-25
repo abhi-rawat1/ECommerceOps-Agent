@@ -13,6 +13,7 @@ from services.approval_service import (
 from services.auth_service import authenticate_support_agent, create_support_user, list_support_users
 from services.jwt_service import decode_access_token
 from services.metrics_service import get_semantic_metric
+from services.memory_store import delete_memory, list_memories, save_memory
 from workflows.support_workflow import process_support_request, resume_support_request
 
 app = FastAPI(title="ECommerceOps-Agent API", version="1.0.0")
@@ -46,11 +47,22 @@ class LoginRequest(BaseModel):
 
 class SupportRequest(BaseModel):
     message: str
+    conversation_id: str | None = None
 
 
 class SupportFollowUpRequest(BaseModel):
     answer: str
     pending_state: dict[str, Any]
+    conversation_id: str | None = None
+
+
+class MemoryCreateRequest(BaseModel):
+    memory_type: str
+    memory_key: str
+    memory_value: Any
+    scope: str = "user"
+    confidence: float | None = None
+    ttl_hours: int | None = None
 
 
 def require_user(authorization: str = Header(default=None, alias="Authorization")):
@@ -143,7 +155,8 @@ def submit_support_request(payload: SupportRequest, current_user=Depends(require
     return process_support_request(
         payload.message,
         user_id=current_user.get("username"),
-        session_id=current_user.get("username"),
+        session_id=payload.conversation_id or current_user.get("username"),
+        conversation_id=payload.conversation_id,
     )
 
 
@@ -153,7 +166,8 @@ def submit_support_follow_up(payload: SupportFollowUpRequest, current_user=Depen
         payload.answer,
         payload.pending_state,
         user_id=current_user.get("username"),
-        session_id=current_user.get("username"),
+        session_id=payload.conversation_id or current_user.get("username"),
+        conversation_id=payload.conversation_id,
     )
 
 
@@ -176,3 +190,30 @@ def get_audit_events(current_user=Depends(require_role({"support_agent", "operat
     lines = [line.strip() for line in log_file.open("r", encoding="utf-8") if line.strip()]
     events = [json.loads(line) for line in lines[-100:]]
     return {"events": events}
+
+
+@app.get("/memory")
+def get_memories(current_user=Depends(require_role({"support_agent", "operations_manager", "finance_analyst"}))):
+    return {"memories": list_memories(current_user.get("username"), "user")}
+
+
+@app.post("/memory")
+def create_memory(payload: MemoryCreateRequest, current_user=Depends(require_role({"support_agent", "operations_manager", "finance_analyst"}))):
+    if payload.scope != "user":
+        raise HTTPException(status_code=400, detail="Only user-scoped memory can be created through this endpoint")
+    return save_memory(
+        owner_id=current_user.get("username"),
+        memory_type=payload.memory_type,
+        memory_key=payload.memory_key,
+        memory_value=payload.memory_value,
+        scope="user",
+        confidence=payload.confidence,
+        ttl_hours=payload.ttl_hours,
+    )
+
+
+@app.delete("/memory/{memory_id}")
+def remove_memory(memory_id: str, current_user=Depends(require_role({"support_agent", "operations_manager", "finance_analyst"}))):
+    if not delete_memory(current_user.get("username"), memory_id):
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"status": "deleted", "memory_id": memory_id}

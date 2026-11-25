@@ -10,6 +10,7 @@ services:
       DB_SCHEMA: ecommerce
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       MODEL_NAME: gpt-4o-mini
+      LANGGRAPH_CHECKPOINT_STORE: postgresql
     restart: unless-stopped
 
   streamlit:
@@ -22,4 +23,5 @@ services:
       DB_SCHEMA: ecommerce
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       MODEL_NAME: gpt-4o-mini
+      LANGGRAPH_CHECKPOINT_STORE: postgresql
     restart: unless-stopped

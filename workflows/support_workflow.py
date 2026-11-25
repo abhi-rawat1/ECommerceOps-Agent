@@ -10,9 +10,18 @@ from core.tracing import (
     flush_langfuse,
     get_langfuse_langchain_handler,
     langfuse_workflow_trace,
+    mask_sensitive_text,
     trace_request_step,
 )
 from services.approval_service import create_approval_request
+from services.checkpoint_store import build_checkpoint_saver
+from services.memory_store import (
+    ensure_session,
+    load_recent_turns,
+    load_workflow_state,
+    save_conversation_turn,
+    save_workflow_state
+)
 from services.sql_agent import build_sql_agent
 
 
@@ -34,6 +43,8 @@ class SupportWorkflowState(TypedDict, total=False):
     original_message: str
     follow_up_answer: str | None
     trace: list[dict[str, Any]]
+    conversation_id: str | None
+    recent_turns: list[dict[str, Any]]
 
 
 _ACTION_TYPES = {
@@ -241,7 +252,7 @@ def _lifecycle_action_node(state: SupportWorkflowState) -> SupportWorkflowState:
     }
 
 
-def build_support_workflow():
+def build_support_workflow(checkpointer=None):
     graph = StateGraph(SupportWorkflowState)
     graph.add_node("intent", _intent_node)
     graph.add_node("read_query", _read_query_node)
@@ -270,10 +281,10 @@ def build_support_workflow():
     graph.add_edge("clarification", END)
     graph.add_edge("metric_query", END)
     graph.add_edge("lifecycle_action", END)
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)
 
 
-_support_workflow = build_support_workflow()
+_support_workflow = build_support_workflow(build_checkpoint_saver())
 
 
 def resume_support_request(
@@ -281,10 +292,23 @@ def resume_support_request(
     pending_state: dict[str, Any],
     user_id: str | None = None,
     session_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     """Merge a user's answer into pending state and continue graph execution."""
     if not pending_state:
-        return process_support_request(follow_up_answer, user_id=user_id, session_id=session_id)
+        return process_support_request(
+            follow_up_answer,
+            user_id=user_id,
+            session_id=session_id,
+            conversation_id=conversation_id,
+        )
+
+    conversation_id = conversation_id or str(pending_state.get("conversation_id") or uuid.uuid4())
+    if user_id:
+        ensure_session(conversation_id, user_id)
+        persisted = load_workflow_state(conversation_id, user_id)
+        if persisted:
+            pending_state = {**persisted.get("state", {}), **pending_state}
 
     original_message = str(pending_state.get("original_message") or pending_state.get("user_message") or "")
     previous_entities = dict(pending_state.get("entities") or {})
@@ -317,10 +341,13 @@ def resume_support_request(
         "presentation": None,
         "sql": None,
         "trace": [],
+        "conversation_id": conversation_id,
+        "recent_turns": load_recent_turns(conversation_id, user_id, limit=10) if user_id else [],
     }
 
     trace_request_step("follow_up_received", request_id, {"follow_up_answer": follow_up_answer})
-    final_state = _support_workflow.invoke(state)
+    thread_config = {"configurable": {"thread_id": conversation_id}}
+    final_state = _support_workflow.invoke(state, thread_config)
     trace_request_step("workflow_resumed", request_id, {"status": final_state["status"], "intent": intent})
 
     pending_state_output = None
@@ -332,7 +359,31 @@ def resume_support_request(
             "intent": intent,
             "entities": merged_entities,
             "missing_fields": final_state.get("missing_fields", missing),
+            "conversation_id": conversation_id,
         }
+
+    if user_id:
+        save_conversation_turn(
+            conversation_id,
+            user_id,
+            "user",
+            str(mask_sensitive_text(follow_up_answer)),
+            {"request_id": request_id, "kind": "follow_up"},
+        )
+        save_conversation_turn(
+            conversation_id,
+            user_id,
+            "assistant",
+            str(mask_sensitive_text(final_state.get("answer") or "")),
+            {"request_id": request_id, "status": final_state["status"]},
+        )
+        save_workflow_state(
+            conversation_id,
+            user_id,
+            request_id,
+            final_state["status"],
+            dict(final_state),
+        )
 
     return {
         "response": {
@@ -356,8 +407,13 @@ def process_support_request(
     approved_action: bool = False,
     user_id: str | None = None,
     session_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     request_id = str(uuid.uuid4())
+    conversation_id = conversation_id or str(uuid.uuid4())
+    if user_id:
+        ensure_session(conversation_id, user_id)
+
     initial_state: SupportWorkflowState = {
         "user_message": user_message,
         "request_id": request_id,
@@ -370,6 +426,8 @@ def process_support_request(
         "presentation": None,
         "sql": None,
         "trace": [],
+        "conversation_id": conversation_id,
+        "recent_turns": load_recent_turns(conversation_id, user_id, limit=10) if user_id else [],
     }
     trace_request_step(
         "workflow_started",
@@ -377,6 +435,7 @@ def process_support_request(
         {"user_id": user_id, "session_id": session_id, "user_message": user_message},
     )
 
+    thread_config = {"configurable": {"thread_id": conversation_id}}
     with langfuse_workflow_trace(
         name="support-workflow-turn",
         input_payload={"user_message": user_message},
@@ -384,7 +443,7 @@ def process_support_request(
         user_id=user_id,
         session_id=session_id,
     ) as root_span:
-        final_state = _support_workflow.invoke(initial_state)
+        final_state = _support_workflow.invoke(initial_state, thread_config)
         trace_request_step("workflow_completed", request_id, {"status": final_state["status"]})
         if root_span is not None:
             root_span.update(
@@ -398,6 +457,29 @@ def process_support_request(
             )
 
     flush_langfuse()
+
+    if user_id:
+        save_conversation_turn(
+            conversation_id,
+            user_id,
+            "user",
+            str(mask_sensitive_text(user_message)),
+            {"request_id": request_id, "kind": "initial"},
+        )
+        save_conversation_turn(
+            conversation_id,
+            user_id,
+            "assistant",
+            str(mask_sensitive_text(final_state.get("answer") or "")),
+            {"request_id": request_id, "status": final_state["status"]},
+        )
+        save_workflow_state(
+            conversation_id,
+            user_id,
+            request_id,
+            final_state["status"],
+            dict(final_state),
+        )
 
     return {
         "response": {
@@ -417,6 +499,7 @@ def process_support_request(
                 "intent": final_state.get("intent"),
                 "entities": final_state.get("entities", {}),
                 "missing_fields": final_state.get("missing_fields", []),
+                "conversation_id": conversation_id,
             } if final_state["status"] == "awaiting_follow_up" else None,
         },
         "trace": [

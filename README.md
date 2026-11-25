@@ -276,6 +276,7 @@ The main configuration variables are:
 | `LANGFUSE_PUBLIC_KEY` | Optional tracing public key | Optional |
 | `LANGFUSE_SECRET_KEY` | Optional tracing secret key | Optional |
 | `LANGFUSE_BASE_URL` | Optional Langfuse host | Optional |
+| `LANGGRAPH_CHECKPOINT_STORE` | LangGraph checkpoint backend: `postgresql` or `memory` | `postgresql` |
 
 Never commit populated environment files or credentials.
 

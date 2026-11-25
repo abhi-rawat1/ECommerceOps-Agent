@@ -1,6 +1,7 @@
 import json
 import os
 from urllib import error, request
+import uuid
 
 import pandas as pd
 import streamlit as st
@@ -92,7 +93,10 @@ def cancel_request_for_ui(request_id: str, approved_by: str, comments: str):
 
 def process_support_request_via_api(message: str):
     token = st.session_state.get("access_token")
-    response = api_request("POST", "/support/request", {"message": message}, token=token)
+    response = api_request("POST", "/support/request", {
+        "message": message,
+        "conversation_id": st.session_state.conversation_id,
+    }, token=token)
     if not response:
         raise ValueError("Support workflow API did not return a response")
     return response
@@ -100,7 +104,11 @@ def process_support_request_via_api(message: str):
 
 def resume_support_request_via_api(answer: str, pending_state: dict):
     token = st.session_state.get("access_token")
-    response = api_request("POST", "/support/follow-up", {"answer": answer, "pending_state": pending_state}, token=token)
+    response = api_request("POST", "/support/follow-up", {
+        "answer": answer,
+        "pending_state": pending_state,
+        "conversation_id": st.session_state.conversation_id,
+    }, token=token)
     if not response:
         raise ValueError("Support workflow API did not return a response")
     return response
@@ -227,6 +235,8 @@ if "pending_workflow" not in st.session_state:
     st.session_state.pending_workflow = None
 if "last_workflow_result" not in st.session_state:
     st.session_state.last_workflow_result = None
+if "conversation_id" not in st.session_state:
+    st.session_state.conversation_id = str(uuid.uuid4())
 
 if st.session_state.user is None:
     st.title("CustomerSupportAssist")
@@ -264,6 +274,7 @@ with st.sidebar:
     if st.button("Logout"):
         st.session_state.user = None
         st.session_state.access_token = None
+        st.session_state.conversation_id = str(uuid.uuid4())
         st.rerun()
 
     st.markdown("---")

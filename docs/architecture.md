@@ -7,7 +7,8 @@
 - **Agentic LLM Workflow:** intent classification, entity extraction, follow-up handling, and approval routing.
 - **SQL agent:** natural-language-to-SQL generation and execution for approved read-only tables.
 - **Guardrails:** SQL validation, blocked destructive statements, table allowlists, and approval-required actions.
-- **PostgreSQL:** synthetic e-commerce data, users, and approval records.
+- **PostgreSQL:** synthetic e-commerce data, users, approvals, LangGraph checkpoints, sessions, conversation turns, workflow state, and approved memories.
+- **Memory store:** user-scoped short-term conversations and explicit long-term memories with TTL and deletion support.
 - **Semantic metrics:** dbt-style definitions for revenue, returns, inventory risk, and support KPIs.
 - **Tracing:** support audit events and optional Langfuse observability.
 
@@ -17,6 +18,12 @@
 flowchart LR
     User[Viewer or Operations User] --> UI[Streamlit UI Dashboard]
     UI --> API[FastAPI]
+    API --> Memory[PostgreSQL Memory Store]
+    Memory --> Sessions[(Agent sessions and turns)]
+    Memory --> WorkflowState[(Workflow pending state)]
+    Memory --> LongTerm[(Approved long-term memories)]
+    API --> Checkpoints[LangGraph PostgreSQL Checkpointer]
+    Checkpoints --> CheckpointDB[(LangGraph checkpoints)]
     subgraph FastAPIServer ["FastAPIServer "]
         API --> Auth[JWT and RBAC Autorization]
         Auth --> Process[New Request]
