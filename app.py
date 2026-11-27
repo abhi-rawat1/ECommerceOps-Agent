@@ -117,9 +117,6 @@ def resume_support_request_via_api(answer: str, pending_state: dict):
 def metric_lookup_via_api(metric_name: str):
     token = st.session_state.get("access_token")
     response = api_request("GET", f"/metrics/{metric_name}", token=token)
-    print('Metric lookup response: *************')
-    print(response)
-
     if not response:
         raise ValueError("Metrics API did not return a response")
     return response
@@ -240,6 +237,10 @@ if "last_workflow_result" not in st.session_state:
     st.session_state.last_workflow_result = None
 if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = str(uuid.uuid4())
+if "question_input" not in st.session_state:
+    st.session_state.question_input = "Display the order count daily trend for Oct-2026 month"
+if "semantic_metric_results" not in st.session_state:
+    st.session_state.semantic_metric_results = {}
 
 if st.session_state.user is None:
     st.title("CustomerSupportAssist")
@@ -282,9 +283,14 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("Quick actions")
-    st.button("For the Order # 2, show order total, payment status, and shipping status. Also, show the products bought under this order")
-    st.button("total_revenue daily trend for Oct-2026 month")
-    st.button("Inventory risk summary")
+    quick_actions = [
+        "For the Order # 2, show order total, payment status, and shipping status. Also, show the products bought under this order",
+        "total_revenue daily trend for Oct-2026 month",
+        "Inventory risk summary",
+    ]
+    for index, action in enumerate(quick_actions):
+        if st.button(action, key=f"quick_action_{index}", width="stretch"):
+            st.session_state.question_input = action
 
 query_examples = [
     "Display the order count daily trend for Oct-2026 month",
@@ -319,7 +325,7 @@ with st.container():
 tabs = st.tabs(["Operations", "Approval Center", "Metrics", "Audit Log"])
 
 with tabs[0]:
-    prompt = st.text_area("Ask a customer support question", value=query_examples[0], height=120)
+    prompt = st.text_area("Ask a customer support question", key="question_input", height=120)
     if st.button("Run support workflow"):
         try:
             with st.spinner("Analyzing support request..."):
@@ -421,23 +427,39 @@ with tabs[1]:
 with tabs[2]:
     st.subheader("Semantic metrics")
     metric_name = st.selectbox("Metric", metrics)
-    if st.button("Refresh metric"):
-        metric = metric_lookup_via_api(metric_name)
-        st.json(metric)
-    '''
-    st.markdown("---")
-    st.subheader("Analytics")
-    data = {
-        "Month": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-        "Revenue": [48, 52, 55, 60, 58, 62],
-        "Returns": [5, 6, 7, 5, 4, 3],
-        "Inventory Health": [88, 90, 92, 94, 93, 95],
-    }
-    df = pd.DataFrame(data)
-    st.line_chart(df.set_index("Month")["Revenue"])
-    st.bar_chart(df.set_index("Month")["Returns"])
-    st.line_chart(df.set_index("Month")["Inventory Health"])
-    '''
+    refresh_metric = st.button("Refresh metric")
+    if refresh_metric or metric_name not in st.session_state.semantic_metric_results:
+        try:
+            st.session_state.semantic_metric_results[metric_name] = metric_lookup_via_api(metric_name)
+        except ValueError as exc:
+            st.error(str(exc))
+
+    metric = st.session_state.semantic_metric_results.get(metric_name)
+    if metric:
+        definition = metric.get("definition") or {}
+        title = definition.get("label") or metric_name.replace("_", " ").title()
+        summary_value = metric.get("summary_value")
+        if summary_value is not None:
+            st.metric(title, summary_value)
+
+        rows = metric.get("rows") or []
+        if rows:
+            metric_df = pd.DataFrame(rows)
+            if {"period", "value"}.issubset(metric_df.columns):
+                metric_df["value"] = pd.to_numeric(metric_df["value"], errors="coerce")
+                metric_df = metric_df.dropna(subset=["value"])
+                if not metric_df.empty:
+                    st.bar_chart(
+                        metric_df.set_index("period")["value"],
+                        y_label=title,
+                        alt=f"{title} over time",
+                    )
+                else:
+                    st.info("No chartable metric values were returned.")
+            else:
+                st.info("Metric response does not contain period and value data for a chart.")
+        else:
+            st.info("No metric trend data was returned.")
 
 with tabs[3]:
     st.subheader("Audit trail")
