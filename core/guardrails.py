@@ -81,8 +81,11 @@ ROUTING RULES
 4. Commands to issue, process, initiate, or request a refund are initiate_refund and require human approval.
 5. Commands to return merchandise or initiate a return are initiate_return and require human approval.
 6. Commands to cancel an item are cancel_item; commands to cancel the whole order are cancel_order. Both require human approval.
-7. Do not infer missing IDs. Add missing_fields and a concise follow_up_question instead.
+7. Do not infer missing IDs from outside the current message and the supplied conversation context. Add missing_fields and a concise follow_up_question instead.
 8. lookup_order requires order_id. lookup_customer_orders requires customer_id. refund_status requires order_id or refund_id. initiate_refund requires order_id and reason. initiate_return requires order_id and return_reason. cancel_item requires order_id and item_id. cancel_order requires order_id.
+9. When conversation context is supplied, use it only to resolve references in the current message, such as "that order", "the same customer", "show it again", or "what about last month".
+10. Copy order_id, customer_id, product_sku, metric_name, or date_range from conversation context only when the current message depends on them.
+11. Do not repeat a prior refund, return, or cancellation unless the current message itself asks for that action.
 
 Output confidence from 0.0 to 1.0. Use high confidence for clear examples and lower confidence for genuinely ambiguous messages.
 Do not emit explanatory prose outside the structured result.
@@ -156,7 +159,7 @@ def require_action_approval(action_name: str, approved: bool) -> GuardrailResult
     return GuardrailResult(True, None, None, action_name)
 
 
-def detect_support_intent(message: str) -> IntentDecision:
+def detect_support_intent(message: str, conversation_context: str | None = None) -> IntentDecision:
     if not settings.openai_api_key:
         return IntentDecision(
             intent="general_query",
@@ -180,12 +183,20 @@ def detect_support_intent(message: str) -> IntentDecision:
 
         handler = get_langfuse_langchain_handler()
         invoke_kwargs = {"callbacks": [handler]} if handler is not None else None
+        human_message = message
+        if conversation_context and conversation_context.strip():
+            human_message = (
+                "Conversation context:\n"
+                f"{conversation_context.strip()}\n\n"
+                "Current message:\n"
+                f"{message}"
+            )
         if invoke_kwargs:
             return classifier.invoke(
-                [("system", _INTENT_SYSTEM_PROMPT), ("human", message)],
+                [("system", _INTENT_SYSTEM_PROMPT), ("human", human_message)],
                 config=invoke_kwargs,
             )
-        return classifier.invoke([("system", _INTENT_SYSTEM_PROMPT), ("human", message)])
+        return classifier.invoke([("system", _INTENT_SYSTEM_PROMPT), ("human", human_message)])
     except Exception as exc:
         try:
             from core.tracing import trace_request_step

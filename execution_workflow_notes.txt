@@ -1,0 +1,171 @@
+initial request   [Note: session_id & conversation_id are same as User Login Session ID.]
+{
+    "message":"",
+    "user_id",
+    "session_id":"",
+    "conversation_id"
+}
+
+Processing Step (process_support_request workflow)
+    a. Parse incoming message and curate following things
+        request_id =  UUID 
+        recent_turns = load_recent_turns(conversation_id, user_id, limit=10)
+        memories= list_memories(user_id, "user")
+
+    b. form a Langgraph state - 
+        "message"
+        conversation_id
+        recent_turns = 
+        conversation_context = append memories & turns data into String format
+    
+    c.  invoke Langgraph
+    d.  save conversation turn for the User Input  (Insert into ecommerce.agent_conversation_turns)
+        {
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "role": "user",
+            "content": user_message,
+            "metadata": {
+                "request_id": request_id,
+                "kind": "initial",
+                "intent": final_state.get("intent"),
+                "entities": final_state.get("entities") or {},
+            }
+        }
+    e.  save conversation turn for the LLM output (Insert into ecommerce.agent_conversation_turns)
+        {
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "role": "assistant",
+            "content": final_state.get("answer") or "",
+            "metadata": {   
+                "request_id": request_id,
+                "status": final_state.get("status"),
+            }
+        }
+
+    f.  save the final_worflow_state into ecommerce.agent_conversation_workflow_state table with 
+          request_id, 
+          user_id,
+          conversation_id, 
+          status,  
+          final_state (excluding recent_turns & conversation_context)
+
+    g.  Return response   [pending_state will be None if final_state["status"] != "awaiting_follow_up" ]
+           {
+                "conversation_id": conversation_id,
+                "response": {
+                    "status": final_state["status"],
+                    "intent": final_state.get("intent"),
+                    "confidence": final_state.get("confidence"),
+                    "answer": final_state.get("answer"),
+                    "missing_fields": final_state.get("missing_fields", []),
+                    "approval_request": final_state.get("approval_request"),
+                    "rows": final_state.get("rows", []),
+                    "presentation": final_state.get("presentation"),
+                    "sql": final_state.get("sql"),
+                    "pending_state": {
+                        "original_message": user_message,
+                        "request_id": request_id,
+                        "approved_action": approved_action,
+                        "intent": final_state.get("intent"),
+                        "entities": final_state.get("entities", {}),
+                        "missing_fields": final_state.get("missing_fields", []),
+                        "conversation_id": conversation_id,
+                    } if final_state["status"] == "awaiting_follow_up" else None,
+                },
+                "trace": [
+                    {"event": "workflow_completed", "request_id": request_id, "payload": {"status": final_state["status"]}},
+                ],
+            }
+
+        h.  Render response on UI 
+            1. if no pending_state then use either 'sql'/'rows'/'presentation' from the response to display the content on UI
+            2. if pending_state then  [st.session_state.pending_workflow = response.get("pending_state")]
+                i.   Extract pending_state data from response. 
+                ii.  Display the followup question asked by LLM.
+                iii. Get the missing info from the User and initiate resume_support_request flow by passing follow_up_answer & pending_state
+
+        i.  resume_support_request workflow
+            1. Parse incoming message and curate following things
+                follow_up_answer = from the followup user response  
+                user_id
+                session_id
+                conversation_id
+
+                pending_state = from the previous Step-g or retrieve from the workflow state using user_id & conversation_id
+                combined_message = original_message + follow_up_answer
+                recent_turns = load_recent_turns(conversation_id, user_id, limit=10)
+                memories= list_memories(user_id, "user")
+                requst_id = from pending_state 
+
+            2. form a Langgraph state - 
+                "message" : combined message 
+                "original_message"
+                conversation_id
+                recent_turns = 
+                conversation_context = append memories & turns data into String format
+            
+            3.  invoke Langgraph
+            4.  save conversation turn for the User Input  (Insert into ecommerce.agent_conversation_turns)
+                {
+                    "user_id": user_id,
+                    "conversation_id": conversation_id,
+                    "role": "user",
+                    "content": user_message,
+                    "metadata": {
+                        "request_id": request_id,
+                        "kind": "initial",
+                        "intent": final_state.get("intent"),
+                        "entities": final_state.get("entities") or {},
+                    }
+                }
+            5.  save conversation turn for the LLM output (Insert into ecommerce.agent_conversation_turns)
+                {
+                    "user_id": user_id,
+                    "conversation_id": conversation_id,
+                    "role": "assistant",
+                    "content": final_state.get("answer") or "",
+                    "metadata": {   
+                        "request_id": request_id,
+                        "status": final_state.get("status"),
+                    }
+                }
+
+            6.  save the final_worflow_state into ecommerce.agent_conversation_workflow_state table with 
+                request_id, 
+                user_id,
+                conversation_id, 
+                status,  
+                final_state (excluding recent_turns & conversation_context)
+
+            7.  Return response   [pending_state will be None if final_state["status"] != "awaiting_follow_up" ]
+                {
+                        "conversation_id": conversation_id,
+                        "response": {
+                            "status": final_state["status"],
+                            "intent": final_state.get("intent"),
+                            "confidence": final_state.get("confidence"),
+                            "answer": final_state.get("answer"),
+                            "missing_fields": final_state.get("missing_fields", []),
+                            "approval_request": final_state.get("approval_request"),
+                            "rows": final_state.get("rows", []),
+                            "presentation": final_state.get("presentation"),
+                            "sql": final_state.get("sql"),
+                            "pending_state": {
+                                "original_message": user_message,
+                                "request_id": request_id,
+                                "approved_action": approved_action,
+                                "intent": final_state.get("intent"),
+                                "entities": final_state.get("entities", {}),
+                                "missing_fields": final_state.get("missing_fields", []),
+                                "conversation_id": conversation_id,
+                            } if final_state["status"] == "awaiting_follow_up" else None,
+                        },
+                        "trace": [
+                            {"event": "workflow_completed", "request_id": request_id, "payload": {"status": final_state["status"]}},
+                        ],
+                    }     
+
+
+        j   Render response on UI (as mentioned in the Step-h)

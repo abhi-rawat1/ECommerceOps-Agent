@@ -117,6 +117,9 @@ def resume_support_request_via_api(answer: str, pending_state: dict):
 def metric_lookup_via_api(metric_name: str):
     token = st.session_state.get("access_token")
     response = api_request("GET", f"/metrics/{metric_name}", token=token)
+    print('Metric lookup response: *************')
+    print(response)
+
     if not response:
         raise ValueError("Metrics API did not return a response")
     return response
@@ -421,7 +424,7 @@ with tabs[2]:
     if st.button("Refresh metric"):
         metric = metric_lookup_via_api(metric_name)
         st.json(metric)
-
+    '''
     st.markdown("---")
     st.subheader("Analytics")
     data = {
@@ -434,6 +437,7 @@ with tabs[2]:
     st.line_chart(df.set_index("Month")["Revenue"])
     st.bar_chart(df.set_index("Month")["Returns"])
     st.line_chart(df.set_index("Month")["Inventory Health"])
+    '''
 
 with tabs[3]:
     st.subheader("Audit trail")

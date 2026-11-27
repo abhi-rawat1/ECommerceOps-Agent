@@ -70,6 +70,20 @@ def save_conversation_turn(
         })
 
 
+def load_latest_active_session(user_id: str) -> dict[str, Any] | None:
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT id, user_id, status, updated_at, expires_at
+            FROM ecommerce.agent_sessions
+            WHERE user_id = :user_id
+              AND status = 'active'
+              AND (expires_at IS NULL OR expires_at > :now)
+            ORDER BY updated_at DESC
+            LIMIT 1
+        """), {"user_id": user_id, "now": _utc_now()}).mappings().first()
+    return dict(row) if row else None
+
+
 def load_recent_turns(session_id: str, user_id: str, limit: int = 10) -> list[dict[str, Any]]:
     ensure_session(session_id, user_id)
     with engine.connect() as conn:

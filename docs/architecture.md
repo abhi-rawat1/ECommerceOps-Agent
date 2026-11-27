@@ -66,7 +66,7 @@ flowchart LR
 ## Request flow
 
 1. A user submits a natural-language request.
-2. The workflow identifies the intent and required entities.
+2. The workflow identifies the intent and required entities. Recent conversation turns and approved user memories are added to the intent and SQL prompts so later questions can refer to earlier ones. Memory is not used for authorization.
 3. The guardrail layer validates read-only SQL or identifies an approval-required action.
 4. Read-only requests may execute a generated SQL query against the allowlisted PostgreSQL tables.
 5. Return, cancellation, inventory update, and refund operations create an approval request.

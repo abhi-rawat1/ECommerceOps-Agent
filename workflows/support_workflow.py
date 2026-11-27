@@ -17,10 +17,11 @@ from services.approval_service import create_approval_request
 from services.checkpoint_store import build_checkpoint_saver
 from services.memory_store import (
     ensure_session,
+    list_memories,
     load_recent_turns,
     load_workflow_state,
     save_conversation_turn,
-    save_workflow_state
+    save_workflow_state,
 )
 from services.sql_agent import build_sql_agent
 
@@ -45,6 +46,7 @@ class SupportWorkflowState(TypedDict, total=False):
     trace: list[dict[str, Any]]
     conversation_id: str | None
     recent_turns: list[dict[str, Any]]
+    conversation_context: str
 
 
 _ACTION_TYPES = {
@@ -85,11 +87,88 @@ def _required_missing(intent: str, entities: dict[str, Any]) -> list[str]:
     return missing
 
 
+_REFERENCE_HINTS = (
+    "that",
+    "those",
+    "same",
+    "previous",
+    "again",
+    "last one",
+    "this order",
+    "this customer",
+    "the order",
+    "the customer",
+)
+
+
+def _turn_metadata(turn: dict[str, Any]) -> dict[str, Any]:
+    metadata = turn.get("metadata") or {}
+    if isinstance(metadata, str):
+        import json
+
+        try:
+            metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            return {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _format_conversation_context(turns: list[dict[str, Any]], memories: list[dict[str, Any]] | None = None) -> str:
+    blocked_keys = ("password", "secret", "token", "credential", "card", "authorization")
+    lines: list[str] = []
+    for memory in (memories or [])[:5]:
+        key = str(memory.get("memory_key") or "")
+        if any(word in key.lower() for word in blocked_keys):
+            continue
+        value = mask_sensitive_text(memory.get("memory_value"))
+        lines.append(f"memory {key}: {value}")
+    for turn in turns[-8:]:
+        role = str(turn.get("role") or "user")
+        content = mask_sensitive_text(str(turn.get("content") or ""))
+        entities = _turn_metadata(turn).get("entities")
+        suffix = f" entities={entities}" if entities else ""
+        lines.append(f"{role}: {content}{suffix}")
+    return "\n".join(lines)
+
+
+def _merge_referenced_entities(message: str, entities: dict[str, Any], turns: list[dict[str, Any]]) -> dict[str, Any]:
+    """Fill empty entities from the latest prior turn when the message refers to it."""
+    text = message.lower()
+    if not any(hint in text for hint in _REFERENCE_HINTS):
+        return entities
+    prior: dict[str, Any] = {}
+    for turn in reversed(turns):
+        candidate = _turn_metadata(turn).get("entities")
+        if isinstance(candidate, dict) and candidate:
+            prior = candidate
+            break
+    if not prior:
+        return entities
+    merged = dict(prior)
+    for key, value in entities.items():
+        if value not in (None, "", [], {}):
+            merged[key] = value
+    return merged
+
+
+def _prompt_context(state: SupportWorkflowState) -> str:
+    return str(state.get("conversation_context") or "")
+
+
+def _persisted_workflow_state(state: dict[str, Any]) -> dict[str, Any]:
+    skipped = {"recent_turns", "conversation_context"}
+    return {key: value for key, value in state.items() if key not in skipped}
+
+
 def _intent_node(state: SupportWorkflowState) -> SupportWorkflowState:
     request_id = state["request_id"]
     trace_request_step("request_received", request_id, {"user_message": state["user_message"]})
-    decision = detect_support_intent(state["user_message"])
-    entities = decision.entities or {}
+    decision = detect_support_intent(state["user_message"], conversation_context=_prompt_context(state))
+    entities = _merge_referenced_entities(
+        state["user_message"],
+        decision.entities or {},
+        state.get("recent_turns") or [],
+    )
     if getattr(decision, "metric_name", None):
         entities = {**entities, "metric_name": decision.metric_name}
     missing = _required_missing(decision.intent, entities)
@@ -126,7 +205,10 @@ def _read_query_node(state: SupportWorkflowState) -> SupportWorkflowState:
 
     request_id = state["request_id"]
     trace_request_step("read_query_started", request_id, {"intent": state["intent"]})
-    query_result = generate_and_execute_query(state["user_message"])
+    query_result = generate_and_execute_query(
+        state["user_message"],
+        conversation_context=_prompt_context(state),
+    )
     trace_request_step("final_response", request_id, {
         "sql": query_result.get("sql"),
         "row_count": len(query_result.get("rows", [])),
@@ -205,7 +287,11 @@ def _metric_query_node(state: SupportWorkflowState) -> SupportWorkflowState:
         return _read_query_node({**state, "intent": "general_query"})
 
     metric_payload = {"metric_name": metric_name, "definition": metric}
-    query_result = generate_and_execute_query(state["user_message"], semantic_metric=metric_payload)
+    query_result = generate_and_execute_query(
+        state["user_message"],
+        semantic_metric=metric_payload,
+        conversation_context=_prompt_context(state),
+    )
     trace_request_step("metric_query_executed", state["request_id"], {
         "metric_name": metric_name,
         "sql": query_result.get("sql"),
@@ -314,7 +400,10 @@ def resume_support_request(
     previous_entities = dict(pending_state.get("entities") or {})
     combined_message = f"{original_message}\nFollow-up answer: {follow_up_answer}"
 
-    decision = detect_support_intent(combined_message)
+    recent_turns = load_recent_turns(conversation_id, user_id, limit=10) if user_id else []
+    memories = list_memories(user_id, "user") if user_id else []
+    conversation_context = _format_conversation_context(recent_turns, memories)
+    decision = detect_support_intent(combined_message, conversation_context=conversation_context)
     merged_entities = {**previous_entities, **(decision.entities or {})}
     if getattr(decision, "metric_name", None):
         merged_entities["metric_name"] = decision.metric_name
@@ -342,7 +431,8 @@ def resume_support_request(
         "sql": None,
         "trace": [],
         "conversation_id": conversation_id,
-        "recent_turns": load_recent_turns(conversation_id, user_id, limit=10) if user_id else [],
+        "recent_turns": recent_turns,
+        "conversation_context": conversation_context,
     }
 
     trace_request_step("follow_up_received", request_id, {"follow_up_answer": follow_up_answer})
@@ -368,7 +458,12 @@ def resume_support_request(
             user_id,
             "user",
             str(mask_sensitive_text(follow_up_answer)),
-            {"request_id": request_id, "kind": "follow_up"},
+            {
+                "request_id": request_id,
+                "kind": "follow_up",
+                "intent": final_state.get("intent"),
+                "entities": final_state.get("entities") or {},
+            },
         )
         save_conversation_turn(
             conversation_id,
@@ -382,10 +477,11 @@ def resume_support_request(
             user_id,
             request_id,
             final_state["status"],
-            dict(final_state),
+            _persisted_workflow_state(final_state),
         )
 
     return {
+        "conversation_id": conversation_id,
         "response": {
             "status": final_state["status"],
             "intent": final_state.get("intent"),
@@ -411,8 +507,12 @@ def process_support_request(
 ) -> dict[str, Any]:
     request_id = str(uuid.uuid4())
     conversation_id = conversation_id or str(uuid.uuid4())
+    recent_turns: list[dict[str, Any]] = []
+    memories: list[dict[str, Any]] = []
     if user_id:
         ensure_session(conversation_id, user_id)
+        recent_turns = load_recent_turns(conversation_id, user_id, limit=10)
+        memories = list_memories(user_id, "user")
 
     initial_state: SupportWorkflowState = {
         "user_message": user_message,
@@ -427,7 +527,8 @@ def process_support_request(
         "sql": None,
         "trace": [],
         "conversation_id": conversation_id,
-        "recent_turns": load_recent_turns(conversation_id, user_id, limit=10) if user_id else [],
+        "recent_turns": recent_turns,
+        "conversation_context": _format_conversation_context(recent_turns, memories),
     }
     trace_request_step(
         "workflow_started",
@@ -464,7 +565,12 @@ def process_support_request(
             user_id,
             "user",
             str(mask_sensitive_text(user_message)),
-            {"request_id": request_id, "kind": "initial"},
+            {
+                "request_id": request_id,
+                "kind": "initial",
+                "intent": final_state.get("intent"),
+                "entities": final_state.get("entities") or {},
+            },
         )
         save_conversation_turn(
             conversation_id,
@@ -478,10 +584,11 @@ def process_support_request(
             user_id,
             request_id,
             final_state["status"],
-            dict(final_state),
+            _persisted_workflow_state(final_state),
         )
 
     return {
+        "conversation_id": conversation_id,
         "response": {
             "status": final_state["status"],
             "intent": final_state.get("intent"),

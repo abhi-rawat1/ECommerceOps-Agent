@@ -12,8 +12,14 @@ from services.approval_service import (
 )
 from services.auth_service import authenticate_support_agent, create_support_user, list_support_users
 from services.jwt_service import decode_access_token
-from services.metrics_service import get_semantic_metric
-from services.memory_store import delete_memory, list_memories, save_memory
+from services.metrics_service import execute_semantic_metric
+from services.memory_store import (
+    delete_memory,
+    list_memories,
+    load_latest_active_session,
+    load_recent_turns,
+    save_memory,
+)
 from workflows.support_workflow import process_support_request, resume_support_request
 
 app = FastAPI(title="ECommerceOps-Agent API", version="1.0.0")
@@ -171,10 +177,33 @@ def submit_support_follow_up(payload: SupportFollowUpRequest, current_user=Depen
     )
 
 
+def _public_turn(turn: dict[str, Any]) -> dict[str, Any]:
+    created_at = turn.get("created_at")
+    metadata = turn.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return {
+        "role": turn.get("role"),
+        "content": turn.get("content"),
+        "metadata": metadata,
+        "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else created_at,
+    }
+
+
+@app.get("/support/conversation")
+def get_support_conversation(current_user=Depends(require_role({"support_agent", "operations_manager", "finance_analyst"}))):
+    user_id = current_user.get("username")
+    session = load_latest_active_session(user_id)
+    if session is None:
+        return {"conversation_id": None, "turns": []}
+    turns = load_recent_turns(session["id"], user_id, limit=20)
+    return {"conversation_id": session["id"], "turns": [_public_turn(turn) for turn in turns]}
+
+
 @app.get("/metrics/{metric_name}")
 def get_metric(metric_name: str, current_user=Depends(require_role({"support_agent", "operations_manager", "finance_analyst"}))):
     try:
-        return get_semantic_metric(metric_name)
+        return execute_semantic_metric(metric_name)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

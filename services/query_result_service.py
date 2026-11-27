@@ -49,7 +49,11 @@ Return only structured output.
     })
 
 
-def generate_and_execute_query(question: str, semantic_metric: dict[str, Any] | None = None) -> dict[str, Any]:
+def generate_and_execute_query(
+    question: str,
+    semantic_metric: dict[str, Any] | None = None,
+    conversation_context: str | None = None,
+) -> dict[str, Any]:
     schema = fetch_table_schema()
     metric_context = semantic_metric or {}
     llm = ChatOpenAI(model=settings.model_name, api_key=settings.openai_api_key, timeout=settings.llm_timeout_seconds, max_retries=1)
@@ -62,15 +66,18 @@ Use only allowed tables and the supplied schema.
 Never use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, MERGE, COPY, or mutations.
 Use table aliases and valid PostgreSQL syntax.
 If a semantic metric definition is supplied, generate SQL based on that definition rather than inventing a metric.
+Conversation context is background for resolving references in the current question, such as "that order" or "the same customer".
+Write SQL for the current question only.
 Return only the SQL statement, without markdown or prose.
 """),
-        ("human", "Question: {question}\nSchema: {schema}\nSemantic metric definition: {metric_context}"),
+        ("human", "Question: {question}\nSchema: {schema}\nSemantic metric definition: {metric_context}\nConversation context: {conversation_context}"),
     ])
 
     sql = str((prompt | llm).invoke({
         "question": question,
         "schema": schema,
         "metric_context": metric_context,
+        "conversation_context": conversation_context or "",
     }).content).strip()
     if sql.startswith("```"):
         sql = sql.replace("```sql", "").replace("```", "").strip()
